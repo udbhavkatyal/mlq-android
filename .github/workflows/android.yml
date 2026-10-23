@@ -1,0 +1,65 @@
+# Builds the MLQ Work Android app (a signed APK) and publishes it as a GitHub Release.
+# Runs on every push to main, or by hand: Actions → Build Android APK → Run workflow.
+name: Build Android APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+permissions:
+  contents: write
+concurrency:
+  group: android
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - name: Install
+        run: npm ci
+      - name: Copy the app into the Android project
+        run: npx cap sync android
+      - name: Signing key and Firebase settings (from the repo's secrets)
+        env:
+          KEYSTORE_B64: ${{ secrets.MLQ_KEYSTORE_B64 }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "::error::Add the MLQ_KEYSTORE_B64 secret (see SETUP.md)"; exit 1; fi
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then echo "::error::Add the GOOGLE_SERVICES_JSON secret (see SETUP.md)"; exit 1; fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/mlq.keystore"
+          echo "MLQ_KEYSTORE_FILE=$RUNNER_TEMP/mlq.keystore" >> "$GITHUB_ENV"
+          printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+      - name: Build the APK
+        working-directory: android
+        env:
+          MLQ_VERSION_CODE: ${{ github.run_number }}
+          MLQ_VERSION_NAME: 1.0.${{ github.run_number }}
+          MLQ_KEYSTORE_PASSWORD: ${{ secrets.MLQ_KEYSTORE_PASSWORD }}
+          MLQ_KEY_ALIAS: mlq
+          MLQ_KEY_PASSWORD: ${{ secrets.MLQ_KEYSTORE_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/MLQ-Work.apk"
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: MLQ Work ${{ github.run_number }}
+          body: Download MLQ-Work.apk below and open it on the phone to install or update.
+          files: MLQ-Work.apk
+          make_latest: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MLQ-Work-apk
+          path: MLQ-Work.apk
