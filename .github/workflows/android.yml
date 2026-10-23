@@ -38,6 +38,16 @@ jobs:
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/mlq.keystore"
           echo "MLQ_KEYSTORE_FILE=$RUNNER_TEMP/mlq.keystore" >> "$GITHUB_ENV"
           printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+      - name: Download libraries through Google's mirror (Maven Central often refuses busy GitHub machines)
+        run: |
+          mkdir -p ~/.gradle/init.d
+          cat > ~/.gradle/init.d/mirror.gradle <<'EOF'
+          def mirror = "https://maven-central.storage-download.googleapis.com/maven2/"
+          allprojects {
+              buildscript { repositories { maven { url mirror } } }
+              repositories { maven { url mirror } }
+          }
+          EOF
       - name: Build the APK
         working-directory: android
         env:
@@ -48,7 +58,8 @@ jobs:
           MLQ_KEY_PASSWORD: ${{ secrets.MLQ_KEYSTORE_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          # a download hiccup shouldn't fail the build: try up to 3 times
+          for i in 1 2 3; do ./gradlew assembleRelease --no-daemon && break; [ "$i" = 3 ] && exit 1; echo "Retrying in 60s…"; sleep 60; done
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/MLQ-Work.apk"
       - name: Publish the release
         uses: softprops/action-gh-release@v2
