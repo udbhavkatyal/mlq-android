@@ -1,0 +1,40 @@
+{
+  "appId": "gg.maxlevel.mlqwork",
+  "appName": "MLQ Work",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "allowNavigation": [
+      "trello.com",
+      "*.trello.com"
+    ]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false,
+    "adjustMarginsForEdgeToEdge": "auto"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 600,
+      "launchAutoHide": true,
+      "backgroundColor": "#f5f5f7",
+      "showSpinner": false
+    },
+    "PushNotifications": {
+      "presentationOptions": [
+        "badge",
+        "sound",
+        "alert"
+      ]
+    },
+    "Keyboard": {
+      "resizeOnFullScreen": true
+    },
+    "Badge": {
+      "persist": true,
+      "autoClear": false
+    }
+  }
+}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MLQ Work</string>
+    <string name="title_activity_main">MLQ Work</string>
+    <string name="package_name">gg.maxlevel.mlqwork</string>
+    <string name="custom_url_scheme">gg.maxlevel.mlqwork</string>
+</resources>

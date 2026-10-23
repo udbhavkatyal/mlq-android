@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MLQ Work</title><meta name="theme-color" content="#f5f5f7">
+<style>
+  html,body{margin:0;height:100%;background:#f5f5f7;font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#111}
+  @media (prefers-color-scheme:dark){html,body{background:#0b0b0d;color:#f2f2f5}}
+  #boot{position:fixed;inset:0;display:grid;place-items:center;text-align:center;padding:24px}
+  #boot img{width:84px;height:84px;border-radius:22px;animation:b 1.6s ease-in-out infinite}
+  #boot p{margin:18px 0 0;color:#8a8a93;font-size:14px}
+  #boot button{margin-top:16px;border:0;border-radius:12px;padding:12px 22px;background:#6c4cf5;color:#fff;font:inherit;font-weight:600}
+  @keyframes b{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.94);opacity:.8}}
+</style>
+<script>
+// MLQ Work for Android. This page never changes: it runs the newest MLQ pushed from the Windows app (Settings → Updates),
+// published to Supabase storage (web/latest.json → web/v<version>/). The last version is remembered, so MLQ still opens
+// on a weak connection (the files come from the phone's cache).
+(function () {
+  var S = "https://cgzqtrtczgqkuvtiofku.supabase.co/storage/v1/object/public/web/";
+  var KEY = "mlq.webver";
+  function show(msg, retry) {
+    document.getElementById("msg").textContent = msg;
+    document.getElementById("retry").style.display = retry ? "inline-block" : "none";
+  }
+  function timeout(p, ms) { return Promise.race([p, new Promise(function (_, no) { setTimeout(function () { no(new Error("timeout")); }, ms); })]); }
+  async function start() {
+    show("Opening MLQ…", false);
+    var ver = null;
+    try {
+      var r = await timeout(fetch(S + "latest.json?t=" + Date.now(), { cache: "no-store" }), 7000);
+      if (r.ok) { var j = await r.json(); if (j && j.version) { ver = j.version; try { localStorage.setItem(KEY, String(ver)); } catch (e) {} } }
+    } catch (e) { /* offline / slow: use the version we ran last time */ }
+    if (!ver) { try { ver = localStorage.getItem(KEY); } catch (e) {} }
+    if (!ver) { show("MLQ needs the internet the first time it opens.", true); return; }
+    var base = S + "v" + ver + "/", html;
+    try {
+      var p = await timeout(fetch(base + "index.html", { cache: "force-cache" }), 15000);
+      if (!p.ok) throw new Error("HTTP " + p.status);
+      html = await p.text();
+    } catch (e) { show("Couldn't open MLQ. Check your internet and try again.", true); return; }
+    html = html.replace(/(<(?:script|link)\b[^>]*?\s(?:src|href)=")(?!https?:|data:|#|\/)([^"]+)"/g, function (m, a, u) { return a + base + u + '"'; });
+    html = html.replace("<head>", "<head><script>window.MLQ_BASE=" + JSON.stringify(base) + ";window.MLQ_NATIVE=true;<" + "/script>");
+    document.open(); document.write(html); document.close();
+  }
+  window.mlqStart = start;
+  document.addEventListener("DOMContentLoaded", start);
+})();
+</script></head>
+<body><div id="boot"><div><img src="icon-192.png" alt=""><p id="msg">Opening MLQ…</p><button id="retry" style="display:none" onclick="mlqStart()">Try Again</button></div></div></body></html>
