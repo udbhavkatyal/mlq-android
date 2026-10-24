@@ -38,7 +38,7 @@ public class MlqMessagingService extends com.capacitorjs.plugins.pushnotificatio
         if (MainActivity.inForeground) return;            // on screen: MLQ's own pop-up shows it
         try {
             show(d);
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
         }
     }
 
@@ -73,19 +73,40 @@ public class MlqMessagingService extends com.capacitorjs.plugins.pushnotificatio
             con = (HttpURLConnection) new URL(url).openConnection();
             con.setConnectTimeout(4000);
             con.setReadTimeout(4000);
+            // read at most 6 MB, then decode small (a notification picture is ~64dp): never the full-size photo
             InputStream in = con.getInputStream();
-            Bitmap src = BitmapFactory.decodeStream(in);
+            java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+            byte[] chunk = new byte[16384];
+            int n, total = 0;
+            while ((n = in.read(chunk)) != -1) {
+                total += n;
+                if (total > 6 * 1024 * 1024) { in.close(); return null; }
+                buf.write(chunk, 0, n);
+            }
             in.close();
+            byte[] bytes = buf.toByteArray();
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.length, o);
+            int side = Math.min(o.outWidth, o.outHeight);
+            if (side <= 0) return null;
+            int sample = 1;
+            while (side / (sample * 2) >= 192) sample *= 2;
+            BitmapFactory.Options o2 = new BitmapFactory.Options();
+            o2.inSampleSize = sample;
+            Bitmap src = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, o2);
             if (src == null) return null;
             int size = Math.min(src.getWidth(), src.getHeight());
             Bitmap sq = Bitmap.createBitmap(src, (src.getWidth() - size) / 2, (src.getHeight() - size) / 2, size, size);
-            Bitmap out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            int outSize = Math.min(size, 192);
+            if (outSize != size) sq = Bitmap.createScaledBitmap(sq, outSize, outSize, true);
+            Bitmap out = Bitmap.createBitmap(outSize, outSize, Bitmap.Config.ARGB_8888);
             Canvas cv = new Canvas(out);
             Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
             p.setShader(new BitmapShader(sq, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP));
-            cv.drawCircle(size / 2f, size / 2f, size / 2f, p);
+            cv.drawCircle(outSize / 2f, outSize / 2f, outSize / 2f, p);
             return out;
-        } catch (Exception e) {
+        } catch (Throwable e) {
             return null;
         } finally {
             if (con != null) con.disconnect();
