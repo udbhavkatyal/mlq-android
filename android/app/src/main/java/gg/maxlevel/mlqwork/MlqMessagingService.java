@@ -18,6 +18,10 @@ import android.os.Build;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.app.Person;
+import androidx.core.content.pm.ShortcutInfoCompat;
+import androidx.core.content.pm.ShortcutManagerCompat;
+import androidx.core.graphics.drawable.IconCompat;
 import androidx.core.content.ContextCompat;
 import com.google.firebase.messaging.RemoteMessage;
 import java.io.InputStream;
@@ -52,6 +56,7 @@ public class MlqMessagingService extends com.capacitorjs.plugins.pushnotificatio
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (nm == null) return;
         String[][] all = {
+            { "direct", "Direct Messages & Mentions", "Someone messaged you or @tagged you", "5" },
             { "messages", "Messages", "Chats and mentions", "5" },
             { "cards", "Cards", "Assigned, reviews, changes, due soon", "4" },
             { "zap", "ZAP", "Super urgent priority", "5" },
@@ -127,6 +132,7 @@ public class MlqMessagingService extends com.capacitorjs.plugins.pushnotificatio
         String body = val(d, "body", "");
         String kind = val(d, "kind", "alert");
         String channel = val(d, "channel", "messages");
+        if ("1".equals(d.get("direct")) && "messages".equals(channel)) channel = "direct";   // (an older app keeps "messages")
         String tag = val(d, "tag", "mlq-" + val(d, "inbox", String.valueOf(System.currentTimeMillis())));
 
         Uri.Builder link = Uri.parse("mlqwork://open").buildUpon();
@@ -164,6 +170,39 @@ public class MlqMessagingService extends com.capacitorjs.plugins.pushnotificatio
             if (n > 0) b.setNumber(n);
         } catch (Exception ignored) { }
 
+        // a direct message or an @tag of you: a conversation of its own, never bundled with the card updates. It sits in
+        // the phone's Conversations section at the top of the shade, with the person's photo and name, like a WhatsApp chat
+        if ("1".equals(d.get("direct"))) {
+            try {
+                String sender = val(d, "sender", title);
+                IconCompat face = big != null ? IconCompat.createWithBitmap(big) : IconCompat.createWithResource(this, R.mipmap.ic_launcher);
+                Person them = new Person.Builder().setName(sender).setIcon(face).setKey(val(d, "senderId", sender)).setImportant(true).build();
+                Person me = new Person.Builder().setName("You").build();
+                boolean group = !"1".equals(d.get("dm"));
+                Intent sc = new Intent(Intent.ACTION_VIEW, link.build(), this, MainActivity.class);
+                ShortcutInfoCompat shortcut = new ShortcutInfoCompat.Builder(this, tag)
+                    .setShortLabel(group ? title : sender)
+                    .setLongLived(true)
+                    .setPerson(them)
+                    .setIcon(face)
+                    .setIntent(sc)
+                    .build();
+                ShortcutManagerCompat.pushDynamicShortcut(this, shortcut);
+                NotificationCompat.MessagingStyle style = new NotificationCompat.MessagingStyle(me)
+                    .setGroupConversation(group)
+                    .addMessage(val(d, "text", body), System.currentTimeMillis(), them);
+                if (group) style.setConversationTitle(val(d, "where", title));
+                b.setStyle(style)
+                    .setShortcutId(tag)
+                    .setGroup("mlq-direct-" + tag)
+                    .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                    .setPriority(NotificationCompat.PRIORITY_MAX);
+                NotificationManagerCompat.from(this).notify(tag, 1, b.build());
+                return;
+            } catch (Throwable ignored) {
+                // anything off: shown the usual way below
+            }
+        }
         NotificationManagerCompat.from(this).notify(tag, 1, b.build());
     }
 }
