@@ -25,12 +25,16 @@
   function timeout(p, ms) { return Promise.race([p, new Promise(function (_, no) { setTimeout(function () { no(new Error("timeout")); }, ms); })]); }
   async function start() {
     show("Opening MLQ…", false);
-    var ver = null;
-    try {
-      var r = await timeout(fetch(S + "latest.json?t=" + Date.now(), { cache: "no-store" }), 7000);
-      if (r.ok) { var j = await r.json(); if (j && j.version) { ver = j.version; try { localStorage.setItem(KEY, String(ver)); } catch (e) {} } }
-    } catch (e) { /* offline / slow: use the version we ran last time */ }
-    if (!ver) { try { ver = localStorage.getItem(KEY); } catch (e) {} }
+    var ver = null, last = null, stale = false;
+    try { last = localStorage.getItem(KEY); } catch (e) {}
+    // the newest published version; a slow network doesn't hold MLQ up for it: the version this phone ran last starts if
+    // the answer takes over 0.6 s (MLQ checks again once it's open and moves up if there's a newer one)
+    var newest = timeout(fetch(S + "latest.json?t=" + Date.now(), { cache: "no-store" }), 7000)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (j && j.version) { try { localStorage.setItem(KEY, String(j.version)); } catch (e) {} return String(j.version); } return null; })
+      .catch(function () { return null; });
+    ver = last ? await Promise.race([newest, new Promise(function (r) { setTimeout(function () { r(null); }, 600); })]) : await newest;
+    if (!ver && last) { ver = last; stale = true; }
     if (!ver) { show("MLQ needs the internet the first time it opens.", true); return; }
     var base = S + "v" + ver + "/", html;
     try {
@@ -39,7 +43,7 @@
       html = await p.text();
     } catch (e) { show("Couldn't open MLQ. Check your internet and try again.", true); return; }
     html = html.replace(/(<(?:script|link)\b[^>]*?\s(?:src|href)=")(?!https?:|data:|#|\/)([^"]+)"/g, function (m, a, u) { return a + base + u + '"'; });
-    html = html.replace("<head>", "<head><script>window.MLQ_BASE=" + JSON.stringify(base) + ";window.MLQ_NATIVE=true;<" + "/script>");
+    html = html.replace("<head>", "<head><script>window.MLQ_BASE=" + JSON.stringify(base) + ";window.MLQ_NATIVE=true;window.MLQ_STALE=" + stale + ";<" + "/script>");
     document.open(); document.write(html); document.close();
   }
   window.mlqStart = start;
