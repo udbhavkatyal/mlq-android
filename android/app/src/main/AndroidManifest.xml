@@ -47,6 +47,9 @@
             </intent-filter>
         </service>
 
+        <!-- Reply / Mark As Read from a chat's notification -->
+        <receiver android:name=".MlqReplyReceiver" android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
