@@ -19,6 +19,7 @@ import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.app.Person;
+import androidx.core.app.RemoteInput;
 import androidx.core.content.pm.ShortcutInfoCompat;
 import androidx.core.content.pm.ShortcutManagerCompat;
 import androidx.core.graphics.drawable.IconCompat;
@@ -124,6 +125,26 @@ public class MlqMessagingService extends com.capacitorjs.plugins.pushnotificatio
         return id == 0 ? null : BitmapFactory.decodeResource(getResources(), id);
     }
 
+
+    // a chat's notification: Reply (typed right there) and Mark As Read, like WhatsApp. Only when MLQ sent a reply key
+    private void addReply(NotificationCompat.Builder b, Map<String, String> d, String tag) {
+        String key = d.get("reply");
+        if (key == null || key.isEmpty()) return;
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 31 ? PendingIntent.FLAG_MUTABLE : 0);
+        Intent r = new Intent(this, MlqReplyReceiver.class).setAction(MlqReplyReceiver.ACTION_REPLY)
+            .putExtra("tag", tag).putExtra("reply", key).putExtra("conv", val(d, "conv", ""));
+        PendingIntent rp = PendingIntent.getBroadcast(this, ("r" + tag).hashCode(), r, flags);
+        RemoteInput input = new RemoteInput.Builder(MlqReplyReceiver.KEY_TEXT).setLabel("Reply").build();
+        b.addAction(new NotificationCompat.Action.Builder(R.drawable.ic_stat_mlq, "Reply", rp)
+            .addRemoteInput(input).setAllowGeneratedReplies(true)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY).setShowsUserInterface(false).build());
+        Intent m = new Intent(this, MlqReplyReceiver.class).setAction(MlqReplyReceiver.ACTION_READ)
+            .putExtra("tag", tag).putExtra("reply", key).putExtra("conv", val(d, "conv", ""));
+        PendingIntent mp = PendingIntent.getBroadcast(this, ("m" + tag).hashCode(), m, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        b.addAction(new NotificationCompat.Action.Builder(R.drawable.ic_stat_mlq, "Mark As Read", mp)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ).setShowsUserInterface(false).build());
+    }
+
     private void show(Map<String, String> d) {
         if (Build.VERSION.SDK_INT >= 33
             && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
@@ -165,6 +186,7 @@ public class MlqMessagingService extends com.capacitorjs.plugins.pushnotificatio
             .setCategory("chat".equals(kind) || "mention".equals(kind) || "comment".equals(kind)
                 ? NotificationCompat.CATEGORY_MESSAGE : NotificationCompat.CATEGORY_EVENT);
         if (big != null) b.setLargeIcon(big);
+        addReply(b, d, tag);
         try {
             int n = Integer.parseInt(val(d, "count", "0"));
             if (n > 0) b.setNumber(n);
