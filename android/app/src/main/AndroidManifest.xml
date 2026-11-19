@@ -49,6 +49,8 @@
 
         <!-- Reply / Mark As Read from a chat's notification -->
         <receiver android:name=".MlqReplyReceiver" android:exported="false" />
+        <!-- Pause / Resume from the Workday timer notification -->
+        <receiver android:name=".MlqTimerReceiver" android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
