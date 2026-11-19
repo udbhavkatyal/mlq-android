@@ -39,6 +39,8 @@ public class MlqMessagingService extends com.capacitorjs.plugins.pushnotificatio
     public void onMessageReceived(@NonNull RemoteMessage message) {
         super.onMessageReceived(message);                 // MLQ itself (when open) hears about it too
         Map<String, String> d = message.getData();
+        // the Workday timer: shown whether MLQ is open or not (it's a running clock, not an alert)
+        if (d != null && d.containsKey("timer")) { try { MlqTimer.render(this, d); } catch (Throwable ignored) { } return; }
         if (d == null || !"1".equals(d.get("mlq"))) return;
         if (MainActivity.inForeground) return;            // on screen: MLQ's own pop-up shows it
         try {
