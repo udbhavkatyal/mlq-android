@@ -26,6 +26,17 @@ public class MlqTimerReceiver extends BroadcastReceiver {
         final String key = intent.getStringExtra("key");
         final String action = PAUSE.equals(intent.getAction()) ? "pause" : RESUME.equals(intent.getAction()) ? "resume" : null;
         if (key == null || action == null) return;
+        // flip it straight away (the clock keeps its place); MLQ's answer then redraws it exactly
+        final Map<String, String> before = MlqTimer.last(ctx);
+        if (!before.isEmpty()) {
+            Map<String, String> now = new HashMap<>(before);
+            long t = System.currentTimeMillis(), at = 0, worked = 0;
+            try { at = Long.parseLong(before.get("at")); worked = Long.parseLong(before.get("worked")); } catch (Throwable ignored) { }
+            if ("pause".equals(action) && "on".equals(before.get("timer"))) { now.put("timer", "paused"); now.put("worked", String.valueOf(worked + Math.max(0, t - at))); }
+            else if ("resume".equals(action)) { now.put("timer", "on"); now.put("started", String.valueOf(t)); }
+            now.put("at", String.valueOf(t));
+            try { MlqTimer.render(ctx, now, true); } catch (Throwable ignored) { }
+        }
         final PendingResult done = goAsync();
         new Thread(() -> {
             HttpURLConnection con = null;
@@ -49,8 +60,11 @@ public class MlqTimerReceiver extends BroadcastReceiver {
                     for (Iterator<String> it = r.keys(); it.hasNext(); ) { String k = it.next(); d.put(k, r.optString(k, "")); }
                     d.put("key", key);
                     MlqTimer.render(ctx, d);
+                } else if (!before.isEmpty()) {
+                    MlqTimer.render(ctx, before, true);       // (didn't go through: back to how it was)
                 }
             } catch (Throwable ignored) {
+                try { if (!before.isEmpty()) MlqTimer.render(ctx, before, true); } catch (Throwable ignored2) { }
             } finally {
                 if (con != null) con.disconnect();
                 done.finish();
